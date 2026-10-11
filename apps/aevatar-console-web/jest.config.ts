@@ -80,6 +80,7 @@ const browserProjectConfig = createProjectConfig('browser');
 const nodeProjectConfig = createProjectConfig('node');
 
 const nodeTestFiles = [
+  '<rootDir>/src/routesConfig.test.ts',
   '<rootDir>/src/pages/MissionControl/runtimeAdapter.test.ts',
   '<rootDir>/src/pages/actors/actorPresentation.test.ts',
   '<rootDir>/src/pages/chat/chatTaskPlan.test.ts',
@@ -89,6 +90,7 @@ const nodeTestFiles = [
   '<rootDir>/src/pages/scopes/components/scopeQuery.test.ts',
   '<rootDir>/src/pages/services/components/serviceQuery.test.ts',
   '<rootDir>/src/pages/workflows/workflowPresentation.test.ts',
+  '<rootDir>/src/pages/workflow-activity-vnext/routes/routeParameters.test.ts',
   '<rootDir>/src/shared/agui/customEventData.test.ts',
   '<rootDir>/src/shared/agui/sseFrameNormalizer.test.ts',
   '<rootDir>/src/shared/config/proxyConfig.test.ts',
