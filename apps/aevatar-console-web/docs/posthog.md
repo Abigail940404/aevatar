@@ -25,6 +25,11 @@ check sampling, URL triggers and recording limits. Local SDK configuration alone
 does not prove that the project has accepted recordings. INP requires user
 interaction, and Web Vitals may arrive when the page becomes hidden or exits.
 
+Time to First Byte (TTFB) is collected separately through `web-vitals` and the
+`page_ttfb` event. PostHog's native Web Vitals allowlist and dashboard support
+FCP, LCP, INP and CLS; they do not include a TTFB card. The Console enables the
+requested LCP, INP and CLS, and uses a custom insight for TTFB.
+
 Recordings mask inputs, text and content attributes while preserving structural
 attributes and styles needed to reconstruct the layout. They block the workflow
 code editor and `.ph-no-capture` elements, and exclude console logs and
@@ -43,6 +48,7 @@ both when sharing a PostHog project with another application.
 
 | Event | Properties | Producer |
 | --- | --- | --- |
+| `page_ttfb` | `ttfbMs`, `navigationType`, `metricId`, `$current_url` | `web-vitals` reports the document's Navigation Timing after load. Time is in **milliseconds**; `$current_url` is the sanitized document navigation URL, preserved across later SPA navigation. No raw performance entries are sent. |
 | `workflow_started` | `workflowId`, `nodeCount` | A real `RUN_STARTED` from the active workflow editor invocation. A queued observation can also be confirmed by the same run's Activity record. |
 | `workflow_finished` | `workflowId`, `status: success \| failed`, `duration` | Terminal SSE evidence, or an authoritative terminal Activity record for that exact run. `duration` is elapsed **milliseconds** from server timestamps; completion is deduplicated. |
 | `sse_disconnect` | `workflowId`, `reason: unexpected_eof \| stream_error` | Unexpected termination of the stream for a confirmed started workflow. Normal terminal EOF, user cancellation and navigation are excluded. |
@@ -74,6 +80,23 @@ to a dashboard. Filter every series to `app = aevatar-console` and
 | Workflow success % | Series A: count `workflow_finished`, filtered to `status = success`. Series B: count `workflow_started`. Formula: `100 * A / B`. |
 | Workflow duration P50 / P95 | Event: `workflow_finished`. Aggregate the numeric `duration` property at the 50th and 95th percentiles; show milliseconds. |
 | SSE disconnect % | Series A: count `sse_disconnect`. Series B: count `workflow_started`. Formula: `100 * A / B`. |
+| Document TTFB P75 | Event: `page_ttfb`. Aggregate numeric `ttfbMs` at the 75th percentile; show milliseconds and break down by `$current_url`. Exclude `navigationType = back-forward-cache`, whose zero values represent cached restores rather than network responses. |
+
+Create the TTFB insight under **Product Analytics → Insights**, then add it to
+the Console dashboard. It does not appear in **Web Analytics → Web Vitals**.
+Use `environment = development` to inspect local verification traffic; saved
+production insights intentionally exclude it. TTFB includes DNS, connection,
+network and server waiting time for the HTML document. It is not the duration
+of a workflow, an API request, editor readiness, or a client-side route change.
+The observer supports Chromium, Firefox and Safari where Navigation Timing is
+available; unavailable or invalid measurements produce no event.
+
+Compare real page loads by opening each authenticated page URL directly. Native
+LCP/INP/CLS and TTFB are scoped to document navigation, since experimental soft
+navigation capture is not enabled. Clicking between SPA routes creates pageview
+events but does not start a new document measurement. Use `$current_url` for
+TTFB attribution, not the pathname at the time its callback runs. Development
+builds and a few manual samples do not establish representative production P75.
 
 Use **Error Tracking → Insights** for native frontend error analysis and
 **crash-free sessions**, and **Web Analytics → Web Vitals** for LCP/INP/CLS.
@@ -152,6 +175,10 @@ as an execution failure.
 - Confirm a masked replay is available, a test exception appears in Error
   Tracking, and Web Vitals arrive after interaction and leaving/hiding the page.
   Not every browser session produces all three metrics.
+- Hard-load a real authenticated Console page and confirm `page_ttfb` carries
+  numeric `ttfbMs`, `navigationType`, `metricId` and its document URL without
+  query strings or fragments. Confirm its custom P75 insight excludes bfcache
+  restores and uses the intended environment.
 - Review the dashboard, test the alerts including an idle period, and verify
   delivery to the configured recipients.
 

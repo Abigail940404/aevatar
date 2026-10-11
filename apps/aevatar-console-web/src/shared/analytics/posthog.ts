@@ -1,5 +1,6 @@
 import type { CaptureResult, PostHogConfig } from 'posthog-js';
 import posthog from 'posthog-js';
+import { onTTFB } from 'web-vitals';
 import type { ConsoleEventProperties } from './types';
 
 let initialized = false;
@@ -153,6 +154,15 @@ export function initializeConsoleAnalytics(): void {
     };
     posthog.init(key, config);
     initialized = true;
+    const documentUrl = window.location.href;
+    onTTFB((metric) => {
+      captureConsoleEvent('page_ttfb', {
+        ttfbMs: metric.value,
+        navigationType: metric.navigationType,
+        metricId: metric.id,
+        $current_url: withoutUrlParameters(metric.navigationURL ?? documentUrl),
+      });
+    });
   } catch {
     // Monitoring must not block authentication or workflow execution.
   }

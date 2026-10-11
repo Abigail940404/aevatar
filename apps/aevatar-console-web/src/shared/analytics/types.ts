@@ -1,4 +1,14 @@
+import type { TTFBMetric } from 'web-vitals';
+
 export type ConsoleEventProperties = {
+  page_ttfb: {
+    /** Time from document navigation to the first byte, in milliseconds. */
+    ttfbMs: number;
+    navigationType: TTFBMetric['navigationType'];
+    metricId: string;
+    /** Sanitized document URL, which may differ from the current SPA route. */
+    $current_url: string;
+  };
   workflow_started: { workflowId: string; nodeCount: number };
   workflow_finished: {
     workflowId: string;

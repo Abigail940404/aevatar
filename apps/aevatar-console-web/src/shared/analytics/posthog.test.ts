@@ -1,7 +1,9 @@
 import posthog from 'posthog-js';
+import { onTTFB } from 'web-vitals';
 
 type BeforeSendFn = import('posthog-js').BeforeSendFn;
 type PostHogConfig = import('posthog-js').PostHogConfig;
+type TTFBMetric = import('web-vitals').TTFBMetric;
 
 jest.mock('posthog-js', () => ({
   __esModule: true,
@@ -13,6 +15,8 @@ jest.mock('posthog-js', () => ({
     get_property: jest.fn(),
   },
 }));
+
+jest.mock('web-vitals', () => ({ onTTFB: jest.fn() }));
 
 function loadAnalytics() {
   let analytics: typeof import('./posthog') | undefined;
@@ -52,6 +56,7 @@ describe('console analytics boundary', () => {
     });
     expect(posthog.init).not.toHaveBeenCalled();
     expect(posthog.capture).not.toHaveBeenCalled();
+    expect(onTTFB).not.toHaveBeenCalled();
 
     process.env.AEVATAR_POSTHOG_KEY = 'phc-test';
     process.env.AEVATAR_POSTHOG_HOST = 'https://eu.i.posthog.com';
@@ -59,9 +64,11 @@ describe('console analytics boundary', () => {
       throw new Error('Collector unavailable');
     });
     expect(analytics.initializeConsoleAnalytics).not.toThrow();
+    expect(onTTFB).not.toHaveBeenCalled();
     analytics.initializeConsoleAnalytics();
     analytics.initializeConsoleAnalytics();
     expect(posthog.init).toHaveBeenCalledTimes(2);
+    expect(onTTFB).toHaveBeenCalledTimes(1);
     jest.mocked(posthog.capture).mockImplementationOnce(() => {
       throw new Error('Collector unavailable');
     });
@@ -72,6 +79,68 @@ describe('console analytics boundary', () => {
         duration: 1234,
       }),
     ).not.toThrow();
+  });
+
+  it('captures document TTFB after SPA navigation without leaking URL parameters or raw entries', () => {
+    process.env.AEVATAR_POSTHOG_KEY = 'phc-test';
+    process.env.AEVATAR_POSTHOG_HOST = 'https://eu.i.posthog.com';
+    const analytics = loadAnalytics();
+    analytics.initializeConsoleAnalytics();
+    const report = jest.mocked(onTTFB).mock.calls[0][0];
+    const metric: TTFBMetric = {
+      name: 'TTFB',
+      value: 187.5,
+      rating: 'good',
+      delta: 187.5,
+      id: 'ttfb-document-alpha',
+      entries: [],
+      navigationType: 'navigate',
+      navigationId: 1,
+      navigationURL:
+        'https://console.example.com/scopes/s-alpha/workflows/wf-alpha?token=private#secret',
+    };
+    window.history.replaceState({}, '', '/scopes/s-alpha/activity');
+    report(metric);
+    expect(posthog.capture).toHaveBeenLastCalledWith('page_ttfb', {
+      ttfbMs: 187.5,
+      navigationType: 'navigate',
+      metricId: 'ttfb-document-alpha',
+      $current_url:
+        'https://console.example.com/scopes/s-alpha/workflows/wf-alpha',
+    });
+
+    // Older Navigation Timing implementations may omit navigationURL.
+    report({ ...metric, navigationURL: undefined });
+    expect(posthog.capture).toHaveBeenLastCalledWith('page_ttfb', {
+      ttfbMs: 187.5,
+      navigationType: 'navigate',
+      metricId: 'ttfb-document-alpha',
+      $current_url: `${window.location.origin}/scopes/s-alpha/workflows`,
+    });
+    jest.mocked(posthog.capture).mockImplementationOnce(() => {
+      throw new Error('Collector unavailable');
+    });
+    expect(() => report(metric)).not.toThrow();
+  });
+
+  it('keeps analytics usable if TTFB observer setup fails without registering twice', () => {
+    process.env.AEVATAR_POSTHOG_KEY = 'phc-test';
+    process.env.AEVATAR_POSTHOG_HOST = 'https://eu.i.posthog.com';
+    jest.mocked(onTTFB).mockImplementationOnce(() => {
+      throw new Error('Navigation Timing unavailable');
+    });
+    const analytics = loadAnalytics();
+    expect(analytics.initializeConsoleAnalytics).not.toThrow();
+    analytics.initializeConsoleAnalytics();
+    analytics.captureConsoleEvent('workflow_started', {
+      workflowId: 'wf-alpha',
+      nodeCount: 2,
+    });
+    expect(onTTFB).toHaveBeenCalledTimes(1);
+    expect(posthog.capture).toHaveBeenCalledWith('workflow_started', {
+      workflowId: 'wf-alpha',
+      nodeCount: 2,
+    });
   });
 
   it('captures vitals/errors and masks replay, OAuth URLs and exception credentials', () => {
